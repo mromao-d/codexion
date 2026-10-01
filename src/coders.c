@@ -9,128 +9,96 @@ void	*drop_dongles(void *arg)
 	pthread_mutex_lock(&coder->props->scheduler_mutex);
 	pthread_mutex_unlock(&(coder->dongles[0]->dongle));
 	coder->dongles[0]->is_free = 1;
-	pthread_mutex_unlock(&(coder->dongles[1]->dongle));
 	coder->dongles[1]->is_free = 1;
 	pthread_cond_broadcast(&coder->props->scheduler_cond);
 	pthread_mutex_unlock(&coder->props->scheduler_mutex);
-	return NULL;
+	return (NULL);
 }
 
-int	take_dongles_one(t_coders	*coder)
+int take_dongles_one(t_coders *coder)
 {
-	time_t			deadline;
-	struct timespec	timeout;
-
-	pthread_mutex_lock(&(coder->props->scheduler_mutex));
-	add_coder_queue(coder);
-	deadline = get_current_time() + coder->props->time_to_burnout / 1000;
-	timeout.tv_sec = deadline / 1000;
-	timeout.tv_nsec = (deadline % 1000) * 1000000;
-	pthread_mutex_lock(&coder->dongles[0]->dongle);
-	coder->dongles[0]->is_free = 0;
-	printf("%li %i has taken a dongle\n", get_current_time() - coder->props->start_time, coder->coder_id);
-	while (!(coder->props->dead) && (coder->coder_id != coder->props->queue[0]
-			 || coder->dongles[0]->is_free == 0))
-	{
-		if (pthread_cond_timedwait(&coder->props->scheduler_cond,
-						&coder->props->scheduler_mutex, &timeout) == ETIMEDOUT)
-		{
-			pthread_mutex_lock(&coder->props->print);
-			if (!coder->props->dead)
-				printf("%li %i burned out\n", get_current_time() - coder->props->start_time, coder->coder_id);
-			coder->props->dead = 1;
-			pthread_mutex_unlock(&coder->props->print);
-			pthread_cond_broadcast(&coder->props->scheduler_cond);
-			pthread_mutex_unlock(&coder->props->scheduler_mutex);
-			return (0);
-		}
-	}
-	return (0);
+    pthread_mutex_lock(&coder->props->scheduler_mutex);
+    while (!coder->props->dead)
+        pthread_cond_wait(&coder->props->scheduler_cond, &coder->props->scheduler_mutex);
+    pthread_mutex_unlock(&coder->props->scheduler_mutex);
+    return (0);
 }
 
-int	take_dongles(t_coders	*coder)
+
+int take_dongles(t_coders *coder)
 {
-	time_t			deadline;
-	struct timespec	timeout;
-
-	pthread_mutex_lock(&(coder->props->scheduler_mutex));
-	add_coder_queue(coder);
-	deadline = get_current_time() + coder->props->time_to_burnout / 1000;
-	timeout.tv_sec = deadline / 1000;
-	timeout.tv_nsec = (deadline % 1000) * 1000000;
-	while (!(coder->props->dead) && (coder->coder_id != coder->props->queue[0]
-			 || coder->dongles[0]->is_free == 0
-			 || coder->dongles[1]->is_free == 0))
-	{
-		if (pthread_cond_timedwait(&coder->props->scheduler_cond,
-						&coder->props->scheduler_mutex, &timeout) == ETIMEDOUT)
-		{
-			pthread_mutex_lock(&coder->props->print);
-			if (!coder->props->dead)
-				printf("%li %i burned out\n", get_current_time() - coder->props->start_time, coder->coder_id);
-			coder->props->dead = 1;
-			pthread_mutex_unlock(&coder->props->print);
-			pthread_cond_broadcast(&coder->props->scheduler_cond);
-			pthread_mutex_unlock(&coder->props->scheduler_mutex);
-			return (0);
-		}
-	}
-	if (coder->props->dead)
-	{
-		pthread_mutex_unlock(&coder->props->scheduler_mutex);
-		return (0);
-	}
-	pthread_mutex_lock(&coder->dongles[0]->dongle);
-	coder->dongles[0]->is_free = 0;
-	pthread_mutex_lock(&coder->dongles[1]->dongle);
-	coder->dongles[1]->is_free = 0;
-	pthread_mutex_lock(&coder->props->print);
-	printf("%li %i has taken a dongle\n", get_current_time() - coder->props->start_time, coder->coder_id);
-	printf("%li %i has taken a dongle\n", get_current_time() - coder->props->start_time, coder->coder_id);
-	printf("%li %i is compiling\n", get_current_time() - coder->props->start_time, coder->coder_id);
-	pthread_mutex_unlock(&coder->props->print);
-	remove_coder_queue(coder);
-	coder->nb_comp++;
-	pthread_mutex_unlock(&coder->props->scheduler_mutex);
-	return (1);
+    pthread_mutex_lock(&(coder->props->scheduler_mutex));
+    add_coder_queue(coder);
+    while (!(coder->props->dead) && (coder->coder_id != coder->props->queue[0]
+             || coder->dongles[0]->is_free == 0
+             || coder->dongles[1]->is_free == 0))
+    {
+        pthread_cond_wait(&coder->props->scheduler_cond,  // ← no timedwait; monitor handles burnout
+                          &coder->props->scheduler_mutex);
+    }
+    if (coder->props->dead)
+    {
+        remove_coder_queue(coder);
+        pthread_mutex_unlock(&coder->props->scheduler_mutex);
+        return (0);
+    }
+    coder->dongles[0]->is_free = 0;  // ← just set flag, no mutex_lock
+    coder->dongles[1]->is_free = 0;
+    coder->last_compile_start = get_current_time();  // ← reset deadline NOW (before printing)
+    pthread_mutex_lock(&coder->props->print);
+    printf("%ld %d has taken a dongle\n", coder->last_compile_start - coder->props->start_time, coder->coder_id);
+    printf("%ld %d has taken a dongle\n", coder->last_compile_start - coder->props->start_time, coder->coder_id);
+    printf("%ld %d is compiling\n",       coder->last_compile_start - coder->props->start_time, coder->coder_id);
+    pthread_mutex_unlock(&coder->props->print);
+    remove_coder_queue(coder);
+    coder->nb_comp++;
+    pthread_mutex_unlock(&coder->props->scheduler_mutex);
+    return (1);
 }
 
-void	*coder_routine(void *arg)
+
+void    *coder_routine(void *arg)
 {
-	t_coders    *coder;
+    t_coders    *coder;
 
-	coder = (t_coders *)arg;
-	while(!(coder->props->dead) && coder->nb_comp < coder->props->number_of_compiles_required)
-	{
-		if (coder->props->number_of_coders == 1)
-		{
-    		if (!take_dongles_one(coder))
-				break;
-		}
-		else
-		{
-			if (!take_dongles(coder))
-				break;
-			usleep(coder->props->time_to_compile);
-			pthread_create(&coder->cool_down, NULL, drop_dongles, coder);
+    coder = (t_coders *)arg;
+    pthread_mutex_lock(&coder->props->scheduler_mutex);
+    while (!coder->props->start)
+        pthread_cond_wait(&coder->props->scheduler_cond, &coder->props->scheduler_mutex);
+    pthread_mutex_unlock(&coder->props->scheduler_mutex);
 
-			pthread_mutex_lock(&(coder->props->print));
-			if (!coder->props->dead)
-				printf("%li %i is debugging\n", get_current_time() - coder->props->start_time, coder->coder_id);
-			pthread_mutex_unlock(&(coder->props->print));
-			usleep(coder->props->time_to_debug);
+    while (!(coder->props->dead) && coder->nb_comp < coder->props->number_of_compiles_required)
+    {
+        if (coder->props->number_of_coders == 1)
+        {
+            if (!take_dongles_one(coder))
+                break;
+        }
+        else
+        {
+            if (!take_dongles(coder))
+                break;
+            usleep(coder->props->time_to_compile);
+            pthread_create(&coder->cool_down, NULL, drop_dongles, coder);
 
-			pthread_mutex_lock(&(coder->props->print));
-			if (!coder->props->dead)
-				printf("%li %i is refactoring\n", get_current_time() - coder->props->start_time, coder->coder_id);
-			pthread_mutex_unlock(&(coder->props->print));
-			usleep(coder->props->time_to_refactor);
+            pthread_mutex_lock(&coder->props->print);
+            if (!coder->props->dead)
+                printf("%ld %d is debugging\n", get_current_time() - coder->props->start_time, coder->coder_id);
+            pthread_mutex_unlock(&coder->props->print);
+            usleep(coder->props->time_to_debug);
 
-			pthread_join(coder->cool_down, NULL);
-		}
-	}
-	return NULL;
+            pthread_mutex_lock(&coder->props->print);
+            if (!coder->props->dead)
+                printf("%ld %d is refactoring\n", get_current_time() - coder->props->start_time, coder->coder_id);
+            pthread_mutex_unlock(&coder->props->print);
+            usleep(coder->props->time_to_refactor);
+
+            pthread_join(coder->cool_down, NULL);
+        }
+    }
+    return (NULL);
 }
+
 
 void	assign_dongles(t_props *props)
 {

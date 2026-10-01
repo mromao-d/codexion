@@ -34,7 +34,7 @@ int	validate_args(t_props **props)
 		((*props)->time_to_refactor == -1) || ((*props)->number_of_compiles_required == -1) ||
 		((*props)->dongle_cooldown == -1))
 		return (1);
-	if (ft_strcmp((*props)->scheduler, "FIFO") != 0 && ft_strcmp((*props)->scheduler, "LIFO") != 0)
+	if (ft_strcmp((*props)->scheduler, "fifo") != 0 && ft_strcmp((*props)->scheduler, "edf") != 0)
 		return (1);
 	return (0);
 }

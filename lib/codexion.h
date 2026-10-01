@@ -22,7 +22,7 @@ typedef struct s_coders {
 	pthread_t	cool_down;
 	
 	int			coder_id;
-	time_t		time_to_burnout;
+	time_t		last_compile_start;
 
 	int			nb_comp;
 
@@ -42,6 +42,8 @@ typedef struct s_props {
 	char		*scheduler;
 	int			*queue;
 	int			queue_size;
+
+	pthread_t	monitor;
 
 	t_coders	*coders;
 	t_dongles	*dongles;
@@ -81,5 +83,9 @@ void	map_dongles(t_props *props);
 // queue.c
 void	add_coder_queue(t_coders *coder);
 void	remove_coder_queue(t_coders *coder);
+
+
+void    *monitor_routine(void *arg);
+
 
 #endif
