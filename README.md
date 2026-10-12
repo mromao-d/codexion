@@ -82,10 +82,12 @@ Each line starts with a timestamp in milliseconds relative to the simulation sta
 ## Blocking Cases Handled
 
 ### Deadlock Prevention
-A deadlock occurs when every coder holds one dongle and waits for the other indefinitely (Coffman's conditions: mutual exclusion, hold-and-wait, no preemption, circular wait). This is prevented by the scheduler queue: a coder only picks up both dongles atomically once it is at the front of the queue **and** both its dongles are free. No coder holds one dongle while waiting for the other, breaking the hold-and-wait condition.
+A deadlock occurs when every coder holds one dongle and waits for the other indefinitely (Coffman's conditions: mutual exclusion, hold-and-wait, no preemption, circular wait). This is prevented structurally: a coder only picks up both dongles atomically, under one lock, once both are free. No coder ever holds one dongle while waiting for the other, breaking the hold-and-wait condition regardless of scheduling policy.
 
-### Starvation Prevention
-Under `fifo`, coders are served strictly in arrival order, so no coder can be bypassed indefinitely. Under `edf`, the coder with the earliest burnout deadline is always served first. Because a coder's deadline advances each time they compile, a coder that has just compiled has a later deadline and naturally yields to those who have not compiled recently. The burnout check in the monitor also provides a hard guarantee: if any coder is starved long enough, the simulation detects and reports it.
+### Starvation Prevention and concurrent compiling
+Arbitration is **per-dongle**, not global. A dongle is physically shared only between two adjacent coders (coder `i` and coder `i+1`), so a coder only needs to defer to its two actual neighbors, not to every other coder in the simulation. Concretely, a coder may take its dongles as soon as both are free, unless one of its two neighbors is also currently waiting **and** has higher scheduling priority for that shared dongle (`fifo`: earlier arrival; `edf`: earlier burnout deadline, with coder ID as a deterministic tie-break). This means non-adjacent coders — e.g. coder 1 and coder 3 in a 4-coder run — can compile at the same time, since they share no dongle and never contend with each other.
+
+Under `fifo`, both arbitration keys (arrival order for `fifo`, deadline for `edf`) are tracked through the same priority-queue mechanism, so a coder that just compiled is re-queued with a fresh, later priority key next time it waits, and naturally yields to coders who have been waiting longer. The burnout check in the monitor also provides a hard guarantee: if any coder is starved long enough regardless, the simulation detects and reports it.
 
 ### Cooldown Handling
 After a coder releases both dongles, a dedicated cooldown thread (`drop_dongles`) sleeps for `dongle_cooldown` milliseconds before marking the dongles as free and broadcasting to waiting coders. This ensures the cooldown period is respected before any other coder can acquire the same dongle.
@@ -104,11 +106,19 @@ Three mutexes are used:
 
 - **`props->scheduler_mutex`** — the central lock protecting all shared mutable state: the wait queue, each dongle's `is_free` flag, the `dead` flag, and coders' `last_compile_start` timestamps. Any thread reading or writing these values must hold this mutex.
 - **`props->print`** — protects all calls to `printf`/`write` so that log lines are never interleaved.
-- **`dongle->dongle`** (one per dongle) — initialized to satisfy the per-resource mutex requirement. Dongle availability is tracked via `is_free` under `scheduler_mutex`.
+- **`dongle->dongle`** (one per dongle) — declared and initialized per dongle as required infrastructure. Mutual exclusion over dongle state is centralized in `scheduler_mutex` rather than split across per-dongle locks: see "Why dongle state is guarded by one shared mutex" below.
+
+#### Why dongle state is guarded by one shared mutex
+
+The subject requires protecting each dongle's state with a `pthread_mutex_t` to prevent coders from duplicating dongles — i.e., two coders must never both see a dongle as free and both take it. This is a check-then-act race: the read of `is_free` and the write that claims it must be atomic with respect to every other coder.
+
+Every place `is_free` is read or written (`take_dongles`, `drop_dongles`) happens while the calling thread already holds `scheduler_mutex`. No two threads can ever be inside those sections concurrently, so the "check both dongles are free, then take both" sequence is atomic — which is exactly what prevents duplication.
+
+A single shared mutex is a deliberate choice, not a shortcut. Compiling requires acquiring **two** dongles atomically: a coder must never hold one while blocked waiting for the other, since that is the hold-and-wait condition that causes deadlock (see Coffman's conditions below). If each dongle had an independent mutex, a coder would need to lock dongle A, then lock dongle B — and if two coders acquire their shared dongles in opposite order, the result is the classic ABBA lock-order deadlock. Guarding the whole table with one mutex makes "check both, take both, or wait" a single atomic transaction, eliminating that deadlock class entirely. `dongle->dongle` is still initialized and destroyed per dongle as declared per-resource infrastructure, even though mutual exclusion is centralized for correctness.
 
 ### `pthread_cond_t` usage
 
-A single condition variable `props->scheduler_cond` is paired with `scheduler_mutex`. Coders waiting for their turn call `pthread_cond_wait`, atomically releasing `scheduler_mutex` and sleeping. Any event that might unblock a coder — a dongle becoming free after cooldown, the front of the queue changing, or the simulation ending — triggers `pthread_cond_broadcast`, waking all waiting coders to re-evaluate their condition.
+A single condition variable `props->scheduler_cond` is paired with `scheduler_mutex`. Coders waiting for their turn call `pthread_cond_wait`, atomically releasing `scheduler_mutex` and sleeping. Any event that might unblock a coder — a dongle becoming free after cooldown, a rival neighbor finishing its wait, or the simulation ending — triggers `pthread_cond_broadcast`, waking all waiting coders to independently re-evaluate their own dongle/rival condition.
 
 ### Monitor thread
 
@@ -126,7 +136,9 @@ If either condition is true, it sets `dead = 1` and broadcasts on `scheduler_con
 
 ### Custom priority queue (heap)
 
-The scheduler queue is a min-heap of coder IDs stored in `props->queue[0..queue_size-1]`. For `edf`, the heap key is each coder's deadline (`last_compile_start + time_to_burnout`); the coder with the smallest deadline sits at index 0 and is served next. Insertion uses `sift_up`; removal of the front entry uses `sift_down` after replacing the root with the last element. For `fifo`, the array is used as a plain FIFO with append-on-enqueue and left-shift-on-dequeue, maintaining arrival order without any heap operations.
+The scheduler queue is a min-heap of coder IDs stored in `props->queue[0..queue_size-1]`, used uniformly for both scheduling policies via a single comparator (`has_priority`): for `edf`, the key is each coder's deadline (`last_compile_start + time_to_burnout`, tie-broken by coder ID); for `fifo`, the key is a monotonically increasing arrival sequence number assigned when the coder is enqueued. Insertion uses `sift_up`. Removal supports removing *any* coder, not just the heap root — a coder's last element is swapped into the removed slot, then both `sift_down` and `sift_up` are tried from that position (only one ever does work), since arbitration is now resolved per-neighbor rather than strictly front-of-queue.
+
+The queue membership and priority ordering are also used directly for arbitration: `is_blocked_by_rival` checks whether a coder's left or right neighbor (the only two coders who could ever contend for either of its dongles) is currently queued with higher priority. This is what allows non-conflicting coders to compile concurrently instead of being serialized behind an unrelated coder's turn.
 
 ## Resources
 

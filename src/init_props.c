@@ -15,10 +15,20 @@ t_props	*map_args(char *args[])
 	(*props).number_of_compiles_required = ft_atoi(args[6]);
 	(*props).dongle_cooldown = ft_atoi(args[7]) * 1000;
 	(*props).scheduler = args[8];
-	(*props).coders = malloc(sizeof(t_coders) * (*props).number_of_coders);
-	(*props).dongles = malloc(sizeof(t_dongles) * (*props).number_of_coders);
-	(*props).queue = malloc(sizeof(int) * (*props).number_of_coders);
+	if ((*props).number_of_coders > 0)
+	{
+		(*props).coders = malloc(sizeof(t_coders) * (*props).number_of_coders);
+		(*props).dongles = malloc(sizeof(t_dongles) * (*props).number_of_coders);
+		(*props).queue = malloc(sizeof(int) * (*props).number_of_coders);
+	}
+	else
+	{
+		(*props).coders = NULL;
+		(*props).dongles = NULL;
+		(*props).queue = NULL;
+	}
 	(*props).queue_size = 0;
+	(*props).seq_counter = 0;
 	(*props).start = 0;
 	(*props).dead = 0;
 	pthread_mutex_init(&props->print, 0);
@@ -27,9 +37,22 @@ t_props	*map_args(char *args[])
 	return (props);
 }
 
+void	free_invalid_args(t_props *props)
+{
+	if (!props)
+		return ;
+	free(props->coders);
+	free(props->dongles);
+	free(props->queue);
+	pthread_mutex_destroy(&props->print);
+	pthread_mutex_destroy(&props->scheduler_mutex);
+	pthread_cond_destroy(&props->scheduler_cond);
+	free(props);
+}
+
 int	validate_args(t_props **props)
 {
-	if (((*props)->number_of_coders == -1) || ((*props)->time_to_burnout == -1) ||
+	if (((*props)->number_of_coders < 1) || ((*props)->time_to_burnout == -1) ||
 		((*props)->time_to_compile == -1) || ((*props)->time_to_debug == -1) ||
 		((*props)->time_to_refactor == -1) || ((*props)->number_of_compiles_required == -1) ||
 		((*props)->dongle_cooldown == -1))

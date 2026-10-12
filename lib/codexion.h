@@ -25,6 +25,7 @@ typedef struct s_coders {
 	time_t		last_compile_start;
 
 	int			nb_comp;
+	int			arrival_seq;
 
 	t_dongles	**dongles;
 
@@ -42,6 +43,7 @@ typedef struct s_props {
 	char		*scheduler;
 	int			*queue;
 	int			queue_size;
+	int			seq_counter;
 
 	pthread_t	monitor;
 
@@ -67,15 +69,18 @@ time_t	get_current_time(void);
 // props.c
 t_props	*map_args(char *args[]);
 int		validate_args(t_props **props);
+void	free_invalid_args(t_props *props);
 
 // init_coders.c
-void	map_coders(t_props *props);
+int		map_coders(t_props *props);
 void 	join_coders(t_props *props);
 
 // coders.c
 void	assign_dongles(t_props *props);
 void	*coder_routine(void *arg);
 void	*drop_dongles(void *arg);
+int		take_dongles(t_coders *coder);
+int		take_dongles_one(t_coders *coder);
 
 // dongles.c
 void	map_dongles(t_props *props);
@@ -83,6 +88,7 @@ void	map_dongles(t_props *props);
 // queue.c
 void	add_coder_queue(t_coders *coder);
 void	remove_coder_queue(t_coders *coder);
+int		is_blocked_by_rival(t_coders *coder);
 
 
 void    *monitor_routine(void *arg);

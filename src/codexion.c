@@ -62,13 +62,6 @@ int ft_print(char *str)
 	return (1);
 }
 
-void	ft_print_args(t_props **props) {
-	printf("Number of Coders is: %i\n", (*props)->number_of_coders);
-	for (int i = 0; i < (*props)->number_of_coders; i++)
-		printf("This is Coder %i\n", (*props)->coders[i].coder_id);
-	return ;
-}
-
 int	ft_free_all(t_props	*props)
 {
 	int	i;
@@ -89,20 +82,13 @@ int	ft_free_all(t_props	*props)
 	return (0);
 }
 
-void	ft_print_coders_dongles(t_props *props) {
-	for (int i = 0; i < props->number_of_coders; i++) {
-		printf("coder %i dongles are: %i, %i",props->coders[i].coder_id, props->coders[i].dongles[0]->dongle_id, props->coders[i].dongles[1]->dongle_id);
-		printf("\n");
-	}
-	return ;
-}
-
-void	run_codexion(t_props *props)
+int	run_codexion(t_props *props)
 {
 	int	i;
 
 	map_dongles(props);
-	map_coders(props);
+	if (map_coders(props))
+		return (1);
 	i = -1;
 	while (++i < props->number_of_coders)
 		pthread_create(&props->coders[i].coder, NULL, coder_routine, &props->coders[i]);
@@ -117,11 +103,13 @@ void	run_codexion(t_props *props)
 	pthread_create(&props->monitor, NULL, monitor_routine, props);
 	join_coders(props);
 	pthread_join(props->monitor, NULL);
+	return (0);
 }
 
 int main(int argc, char *argv[])
 {
 	t_props	*props;
+	int		ret;
 
 	if (argc != 9)
 		return (ft_print("Wrong number of args\n"));
@@ -129,10 +117,10 @@ int main(int argc, char *argv[])
 	if (validate_args(&props))
 	{
 		ft_print("Wrong args\n");
-		free(props);
+		free_invalid_args(props);
 		return (1);
 	}
-	run_codexion(props);
-	// ft_print_coders_dongles(props);
-	return (ft_free_all(props));
+	ret = run_codexion(props);
+	ft_free_all(props);
+	return (ret);
 }
