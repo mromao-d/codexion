@@ -1,24 +1,40 @@
 #include "../lib/codexion.h"
 
-int	ft_strcmp(char *s1, char *s2)
-{
-	int	i;
-
-	i = 0;
-	while (s1[i] && s2[i])
-	{
-		if (s1[i] != s2[i])
-			break;
-		i++;
-	}
-	return (s1[i] - s2[i]);
-}
-
-time_t	get_current_time(void)
+long	get_time_ms(void)
 {
 	struct timeval	time;
 
-	if (gettimeofday(&time, NULL) == -1)
-		write(2, "gettimeofday() error\n", 22);
-	return (time.tv_sec * 1000 + time.tv_usec / 1000);
+	gettimeofday(&time, NULL);
+	return (time.tv_sec * 1000L + time.tv_usec / 1000);
+}
+
+int	is_stopped(t_props *props)
+{
+	int	dead;
+
+	pthread_mutex_lock(&props->print);
+	dead = props->dead;
+	pthread_mutex_unlock(&props->print);
+	return (dead);
+}
+
+void	ms_sleep(t_props *props, long ms)
+{
+	long	end;
+
+	end = get_time_ms() + ms;
+	while (get_time_ms() < end && !is_stopped(props))
+		usleep(500);
+}
+
+void	log_state(t_coder *coder, char *msg)
+{
+	t_props	*props;
+
+	props = coder->props;
+	pthread_mutex_lock(&props->print);
+	if (!props->dead)
+		printf("%ld %d %s\n", get_time_ms() - props->start_time,
+			coder->id, msg);
+	pthread_mutex_unlock(&props->print);
 }

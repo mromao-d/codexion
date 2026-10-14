@@ -1,126 +1,62 @@
 #include "../lib/codexion.h"
 
-void    *monitor_routine(void *arg)
+static int	print_error(char *msg)
 {
-    t_props *props;
-    int     i;
-    int     all_done;
-    time_t  now;
-    time_t  deadline;
-
-    props = (t_props *)arg;
-    while (1)
-    {
-        usleep(1000);
-        pthread_mutex_lock(&props->scheduler_mutex);
-        if (props->dead)
-        {
-            pthread_mutex_unlock(&props->scheduler_mutex);
-            return (NULL);
-        }
-        now = get_current_time();
-        all_done = 1;
-        i = -1;
-        while (++i < props->number_of_coders)
-        {
-            if (props->coders[i].nb_comp < props->number_of_compiles_required)
-                all_done = 0;
-            deadline = props->coders[i].last_compile_start
-                       + props->time_to_burnout / 1000;
-            if (now >= deadline)
-            {
-                pthread_mutex_lock(&props->print);
-                printf("%ld %d burned out\n",
-                    now - props->start_time, props->coders[i].coder_id);
-                pthread_mutex_unlock(&props->print);
-                props->dead = 1;
-                pthread_cond_broadcast(&props->scheduler_cond);
-                pthread_mutex_unlock(&props->scheduler_mutex);
-                return (NULL);
-            }
-        }
-        if (all_done)
-        {
-            props->dead = 1;
-            pthread_cond_broadcast(&props->scheduler_cond);
-            pthread_mutex_unlock(&props->scheduler_mutex);
-            return (NULL);
-        }
-        pthread_mutex_unlock(&props->scheduler_mutex);
-    }
-    return (NULL);
-}
-
-
-int ft_print(char *str)
-{
-	while (*str)
-	{
-		write(1, &(*str), 1);
-		str++;
-	}
+	write(2, msg, strlen(msg));
 	return (1);
 }
 
-int	ft_free_all(t_props	*props)
+static void	join_coders(t_props *props, int count)
 {
 	int	i;
 
 	i = -1;
-	while (++i < props->number_of_coders)
-	{
-		pthread_mutex_destroy(&props->dongles[i].dongle);
-		free(props->coders[i].dongles);
-	}
-	free(props->coders);
-	free(props->dongles);
-	free(props->queue);
-	pthread_mutex_destroy(&props->print);
-	pthread_mutex_destroy(&props->scheduler_mutex);
-	pthread_cond_destroy(&props->scheduler_cond);
-	free(props);
-	return (0);
+	while (++i < count)
+		pthread_join(props->coders[i].thread, NULL);
 }
 
-int	run_codexion(t_props *props)
+static int	run_codexion(t_props *props)
 {
-	int	i;
+	int	created;
+	int	failed;
 
-	map_dongles(props);
-	if (map_coders(props))
-		return (1);
-	i = -1;
-	while (++i < props->number_of_coders)
-		pthread_create(&props->coders[i].coder, NULL, coder_routine, &props->coders[i]);
-	pthread_mutex_lock(&props->scheduler_mutex);
-	props->start_time = get_current_time();
-	i = -1;
-	while (++i < props->number_of_coders)
-		props->coders[i].last_compile_start = props->start_time;
-	props->start = 1;
-	pthread_cond_broadcast(&props->scheduler_cond);
-	pthread_mutex_unlock(&props->scheduler_mutex);
-	pthread_create(&props->monitor, NULL, monitor_routine, props);
-	join_coders(props);
-	pthread_join(props->monitor, NULL);
-	return (0);
+	props->start_time = get_time_ms();
+	created = -1;
+	while (++created < props->number_of_coders)
+		props->coders[created].last_compile_start = props->start_time;
+	created = 0;
+	while (created < props->number_of_coders
+		&& !pthread_create(&props->coders[created].thread, NULL,
+			coder_routine, &props->coders[created]))
+		created++;
+	failed = (created != props->number_of_coders);
+	if (!failed && pthread_create(&props->monitor, NULL, monitor_routine,
+			props))
+		failed = 1;
+	else if (!failed)
+		pthread_join(props->monitor, NULL);
+	if (failed)
+		stop_simulation(props, NULL);
+	join_coders(props, created);
+	return (failed);
 }
 
-int main(int argc, char *argv[])
+int	main(int argc, char **argv)
 {
-	t_props	*props;
+	t_props	props;
 	int		ret;
 
 	if (argc != 9)
-		return (ft_print("Wrong number of args\n"));
-	props = map_args(argv);
-	if (validate_args(&props))
-	{
-		ft_print("Wrong args\n");
-		free_invalid_args(props);
-		return (1);
-	}
-	ret = run_codexion(props);
-	ft_free_all(props);
+		return (print_error("Error: expected 8 arguments\n"));
+	if (parse_args(&props, argv))
+		return (print_error("Error: invalid arguments\n"));
+	if (init_all(&props))
+		return (print_error("Error: initialization failed\n"));
+	ret = 0;
+	if (props.number_of_compiles_required > 0)
+		ret = run_codexion(&props);
+	free_all(&props);
+	if (ret)
+		print_error("Error: thread creation failed\n");
 	return (ret);
 }
