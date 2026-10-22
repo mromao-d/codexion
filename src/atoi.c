@@ -1,3 +1,15 @@
+/* ************************************************************************** */
+/*                                                                            */
+/*                                                        :::      ::::::::   */
+/*   atoi.c                                             :+:      :+:    :+:   */
+/*                                                    +:+ +:+         +:+     */
+/*   By: mromao-s <mromao-s@student.42.fr>          +#+  +:+       +#+        */
+/*                                                +#+#+#+#+#+   +#+           */
+/*   Created: 2026/10/22 12:46:43 by mromao-s          #+#    #+#             */
+/*   Updated: 2026/10/22 12:46:43 by mromao-s         ###   ########.fr       */
+/*                                                                            */
+/* ************************************************************************** */
+
 #include "../lib/codexion.h"
 
 int	ft_isdigit(int c)
@@ -17,7 +29,7 @@ int	ft_atoi(const char *nptr)
 	out = 0;
 	has_digit = 0;
 	while (nptr[i] == ' ' || nptr[i] == '\t' || nptr[i] == '\n'
-        || nptr[i] == '\v' || nptr[i] == '\f' || nptr[i] == '\r')
+		|| nptr[i] == '\v' || nptr[i] == '\f' || nptr[i] == '\r')
 		i++;
 	if (nptr[i] == '-')
 		return (-1);
@@ -30,7 +42,7 @@ int	ft_atoi(const char *nptr)
 	}
 	if (!has_digit)
 		return (-1);
-    if (nptr[i] && !ft_isdigit(nptr[i]))
-        return (-1);
+	if (nptr[i] && !ft_isdigit(nptr[i]))
+		return (-1);
 	return (out);
 }

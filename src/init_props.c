@@ -1,3 +1,15 @@
+/* ************************************************************************** */
+/*                                                                            */
+/*                                                        :::      ::::::::   */
+/*   init_props.c                                       :+:      :+:    :+:   */
+/*                                                    +:+ +:+         +:+     */
+/*   By: mromao-s <mromao-s@student.42.fr>          +#+  +:+       +#+        */
+/*                                                +#+#+#+#+#+   +#+           */
+/*   Created: 2026/10/22 12:56:22 by mromao-s          #+#    #+#             */
+/*   Updated: 2026/10/22 12:56:22 by mromao-s         ###   ########.fr       */
+/*                                                                            */
+/* ************************************************************************** */
+
 #include "../lib/codexion.h"
 
 t_props	*map_args(char *args[])
@@ -7,7 +19,7 @@ t_props	*map_args(char *args[])
 	props = malloc(sizeof(t_props));
 	if (!props)
 		return (NULL);
-	(*props).number_of_coders = ft_atoi(args[1]);
+	(*props).nb_of_coders = ft_atoi(args[1]);
 	(*props).time_to_burnout = ft_atoi(args[2]) * 1000;
 	(*props).time_to_compile = ft_atoi(args[3]) * 1000;
 	(*props).time_to_debug = ft_atoi(args[4]) * 1000;
@@ -15,11 +27,11 @@ t_props	*map_args(char *args[])
 	(*props).number_of_compiles_required = ft_atoi(args[6]);
 	(*props).dongle_cooldown = ft_atoi(args[7]) * 1000;
 	(*props).scheduler = args[8];
-	if ((*props).number_of_coders > 0)
+	if ((*props).nb_of_coders > 0)
 	{
-		(*props).coders = malloc(sizeof(t_coders) * (*props).number_of_coders);
-		(*props).dongles = malloc(sizeof(t_dongles) * (*props).number_of_coders);
-		(*props).queue = malloc(sizeof(int) * (*props).number_of_coders);
+		(*props).coders = malloc(sizeof(t_coders) * (*props).nb_of_coders);
+		(*props).dongles = malloc(sizeof(t_dongles) * (*props).nb_of_coders);
+		(*props).queue = malloc(sizeof(int) * (*props).nb_of_coders);
 	}
 	else
 	{
@@ -52,12 +64,14 @@ void	free_invalid_args(t_props *props)
 
 int	validate_args(t_props **props)
 {
-	if (((*props)->number_of_coders < 1) || ((*props)->time_to_burnout == -1) ||
-		((*props)->time_to_compile == -1) || ((*props)->time_to_debug == -1) ||
-		((*props)->time_to_refactor == -1) || ((*props)->number_of_compiles_required == -1) ||
-		((*props)->dongle_cooldown == -1))
+	if (((*props)->nb_of_coders < 1) || ((*props)->time_to_burnout == -1)
+		|| ((*props)->time_to_compile == -1) || ((*props)->time_to_debug == -1)
+		|| ((*props)->time_to_refactor == -1)
+		|| ((*props)->number_of_compiles_required == -1)
+		|| ((*props)->dongle_cooldown == -1))
 		return (1);
-	if (ft_strcmp((*props)->scheduler, "fifo") != 0 && ft_strcmp((*props)->scheduler, "edf") != 0)
+	if (ft_strcmp((*props)->scheduler, "fifo") != 0
+		&& ft_strcmp((*props)->scheduler, "edf") != 0)
 		return (1);
 	return (0);
 }

@@ -1,3 +1,15 @@
+/* ************************************************************************** */
+/*                                                                            */
+/*                                                        :::      ::::::::   */
+/*   queue.c                                            :+:      :+:    :+:   */
+/*                                                    +:+ +:+         +:+     */
+/*   By: mromao-s <mromao-s@student.42.fr>          +#+  +:+       +#+        */
+/*                                                +#+#+#+#+#+   +#+           */
+/*   Created: 2026/10/22 13:06:44 by mromao-s          #+#    #+#             */
+/*   Updated: 2026/10/22 13:07:10 by mromao-s         ###   ########.fr       */
+/*                                                                            */
+/* ************************************************************************** */
+
 #include "../lib/codexion.h"
 
 static time_t	get_deadline(t_props *props, int coder_id)
@@ -19,7 +31,8 @@ static int	has_priority(t_props *props, int a, int b)
 			return (deadline_a < deadline_b);
 		return (a < b);
 	}
-	return (props->coders[a - 1].arrival_seq < props->coders[b - 1].arrival_seq);
+	return (props->coders[a - 1].arrival_seq
+		< props->coders[b - 1].arrival_seq);
 }
 
 static void	sift_up(t_props *props, int i)
@@ -123,7 +136,7 @@ static int	neighbor_id(t_props *props, int coder_id, int offset)
 {
 	int	n;
 
-	n = (coder_id - 1 + offset + props->number_of_coders) % props->number_of_coders;
+	n = (coder_id - 1 + offset + props->nb_of_coders) % props->nb_of_coders;
 	return (n + 1);
 }
 
@@ -132,7 +145,7 @@ int	is_blocked_by_rival(t_coders *coder)
 	int	left;
 	int	right;
 
-	if (coder->props->number_of_coders < 2)
+	if (coder->props->nb_of_coders < 2)
 		return (0);
 	left = neighbor_id(coder->props, coder->coder_id, -1);
 	right = neighbor_id(coder->props, coder->coder_id, 1);
