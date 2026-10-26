@@ -34,3 +34,26 @@ time_t	get_current_time(void)
 		write(2, "gettimeofday() error\n", 22);
 	return (time.tv_sec * 1000 + time.tv_usec / 1000);
 }
+
+int	is_dead(t_props *props)
+{
+	int	dead;
+
+	pthread_mutex_lock(&props->scheduler_mutex);
+	dead = props->dead;
+	pthread_mutex_unlock(&props->scheduler_mutex);
+	return (dead);
+}
+
+void	print_status(t_coders *coder, char *msg)
+{
+	pthread_mutex_lock(&coder->props->scheduler_mutex);
+	if (!coder->props->dead)
+	{
+		pthread_mutex_lock(&coder->props->print);
+		printf("%ld %d %s\n", get_current_time() - coder->props->start_time,
+			coder->coder_id, msg);
+		pthread_mutex_unlock(&coder->props->print);
+	}
+	pthread_mutex_unlock(&coder->props->scheduler_mutex);
+}

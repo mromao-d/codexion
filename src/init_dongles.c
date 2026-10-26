@@ -19,7 +19,11 @@ void	map_dongles(t_props *props)
 	i = -1;
 	while (++i < props->nb_of_coders)
 	{
-		pthread_mutex_init(&props->dongles[i].dongle, 0);
+		if (pthread_mutex_init(&props->dongles[i].dongle, 0) != 0)
+		{
+			printf("Error initing mutex on map dongles\n");
+			return ;
+		}
 		props->dongles[i].dongle_id = i;
 		props->dongles[i].is_free = 1;
 	}

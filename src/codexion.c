@@ -12,13 +12,54 @@
 
 #include "../lib/codexion.h"
 
+void	*all_coders_done(t_props	*props)
+{
+	props->dead = 1;
+	pthread_cond_broadcast(&props->scheduler_cond);
+	pthread_mutex_unlock(&props->scheduler_mutex);
+	return (NULL);
+}
+
+void	*kill_coder(t_props	*props, int i, time_t	now)
+{
+	pthread_mutex_lock(&props->print);
+	printf("%ld %d burned out\n",
+		now - props->start_time, props->coders[i].coder_id);
+	pthread_mutex_unlock(&props->print);
+	props->dead = 1;
+	pthread_cond_broadcast(&props->scheduler_cond);
+	pthread_mutex_unlock(&props->scheduler_mutex);
+	return (NULL);
+}
+
+int	monitor_coders(t_props	*props, time_t	now)
+{
+	int		i;
+	int		all_done;
+	time_t	deadline;
+
+	i = -1;
+	all_done = 1;
+	while (++i < props->nb_of_coders)
+	{
+		if (props->coders[i].nb_comp < props->number_of_compiles_required)
+			all_done = 0;
+		deadline = (props->coders[i].last_compile_start
+				+ props->time_to_burnout / 1000);
+		if (now >= deadline)
+		{
+			kill_coder(props, i, now);
+			return (-1);
+		}
+	}
+	return (all_done);
+}
+
 void	*monitor_routine(void *arg)
 {
 	t_props	*props;
-	int		i;
 	int		all_done;
 	time_t	now;
-	time_t	deadline;
 
 	props = (t_props *)arg;
 	while (1)
@@ -32,32 +73,11 @@ void	*monitor_routine(void *arg)
 		}
 		now = get_current_time();
 		all_done = 1;
-		i = -1;
-		while (++i < props->nb_of_coders)
-		{
-			if (props->coders[i].nb_comp < props->number_of_compiles_required)
-				all_done = 0;
-			deadline = (props->coders[i].last_compile_start
-					+ props->time_to_burnout / 1000);
-			if (now >= deadline)
-			{
-				pthread_mutex_lock(&props->print);
-				printf("%ld %d burned out\n",
-					now - props->start_time, props->coders[i].coder_id);
-				pthread_mutex_unlock(&props->print);
-				props->dead = 1;
-				pthread_cond_broadcast(&props->scheduler_cond);
-				pthread_mutex_unlock(&props->scheduler_mutex);
-				return (NULL);
-			}
-		}
-		if (all_done)
-		{
-			props->dead = 1;
-			pthread_cond_broadcast(&props->scheduler_cond);
-			pthread_mutex_unlock(&props->scheduler_mutex);
+		all_done = monitor_coders(props, now);
+		if (all_done == -1)
 			return (NULL);
-		}
+		if (all_done)
+			return (all_coders_done(props));
 		pthread_mutex_unlock(&props->scheduler_mutex);
 	}
 	return (NULL);
@@ -126,6 +146,8 @@ int	main(int argc, char *argv[])
 	if (argc != 9)
 		return (ft_print("Wrong number of args\n"));
 	props = map_args(argv);
+	if (!props)
+		return (1);
 	if (validate_args(&props))
 	{
 		ft_print("Wrong args\n");

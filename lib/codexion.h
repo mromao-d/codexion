@@ -21,6 +21,9 @@
 # include <sys/time.h>
 # include <errno.h>
 
+# define MAX_INT 2147483647
+# define MAX_CODERS 300
+
 typedef struct s_dongles
 {
 	pthread_mutex_t	dongle;
@@ -81,6 +84,8 @@ int		ft_atoi(const char *nptr);
 // utils
 int		ft_strcmp(char *s1, char *s2);
 time_t	get_current_time(void);
+int		is_dead(t_props *props);
+void	print_status(t_coders *coder, char *msg);
 
 // props.c
 t_props	*map_args(char *args[]);

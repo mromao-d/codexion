@@ -1,7 +1,7 @@
 NAME	= codexion
 
 CC		= cc
-CFLAGS	= -Wall -Wextra -Werror -pthread
+CFLAGS	= -Wall -Wextra -Werror -pthread -g -fsanitize=thread
 
 SRC_DIR	= src
 SRC		= $(SRC_DIR)/codexion.c \
@@ -30,5 +30,8 @@ fclean: clean
 	rm -f $(NAME)
 
 re: fclean all
+
+valgrind: $(NAME)
+	valgrind --leak-check=full -s ./$(NAME) 19 800 200 200 200 3 50 fifo
 
 .PHONY: all clean fclean re
